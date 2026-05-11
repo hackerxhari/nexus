@@ -289,6 +289,7 @@ nexus/
 │
 ├── .gitignore
 ├── .gitattributes
+├── docker-compose.yml            # Docker for Redis and Qdrant
 ├── requirements.txt              # Full pinned dependency list (152 packages)
 ├── req.txt                       # Minimal/core dependency list
 └── README.md
@@ -807,42 +808,65 @@ cd frontend && npm run build
 ### Production Docker Compose (Example)
 
 ```yaml
-version: '3.8'
+# ─────────────────────────────────────────────
+# Nexus — Infrastructure Services
+# Starts Qdrant (vector DB) and Redis (cache).
+# The FastAPI backend and React frontend are
+# run separately during development.
+#
+# Usage:
+#   docker compose up -d          # start both services in background
+#   docker compose down           # stop and remove containers
+#   docker compose down -v        # also wipe persistent volumes
+# ─────────────────────────────────────────────
+
+version: "3.9"
 
 services:
-  nexus-api:
-    build: .
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
-    ports:
-      - "8000:8000"
-    environment:
-      - QDRANT_HOST=qdrant
-      - REDIS_URL=redis://redis:6379/0
-      - LLM_PROVIDER=ollama
-    volumes:
-      - ./nexus.db:/app/nexus.db
-      - ./uploads:/app/uploads
-    depends_on:
-      - qdrant
-      - redis
 
+  # ── Qdrant Vector Database ──────────────────
   qdrant:
     image: qdrant/qdrant:latest
+    container_name: nexus-qdrant
+    restart: unless-stopped
     ports:
-      - "6333:6333"
+      - "6333:6333"   # HTTP REST API
+      - "6334:6334"   # gRPC API
     volumes:
       - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
+  # ── Redis Cache & Session Store ─────────────
   redis:
     image: redis:7-alpine
+    container_name: nexus-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
+# ── Named Volumes ───────────────────────────
 volumes:
   qdrant_storage:
+    driver: local
   redis_data:
+    driver: local
+
 ```
 
 ### Recommended Production Architecture
