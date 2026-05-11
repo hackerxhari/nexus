@@ -27,7 +27,6 @@
 - [API Reference](#-api-reference)
 - [Access Control Matrix](#-access-control-matrix)
 - [Security & Compliance](#-security--compliance)
-- [Testing](#-testing)
 - [Scripts & Utilities](#-scripts--utilities)
 - [Frontend Overview](#-frontend-overview)
 - [Deployment](#-deployment)
@@ -285,12 +284,6 @@ nexus/
 │   ├── query_service.py          # Custom Q&A lookup → vector retrieval → LLM generation
 │   ├── stt_service.py            # Speech-to-text engine wrapper (Vosk/Moonshine)
 │   └── admin_service.py          # User/department/role management business logic
-│
-├── tests/                        # Test suite
-│   ├── test_auth.py              # Authentication and JWT tests
-│   ├── test_ingestion.py         # Extractor and chunker unit tests
-│   ├── test_retrieval.py         # Vector search and RBAC filter tests
-│   └── test_query.py             # End-to-end query pipeline integration tests
 │
 ├── .gitignore
 ├── .gitattributes
@@ -767,35 +760,6 @@ Nexus implements a hierarchical RBAC model. Access is cumulative — higher role
 
 ---
 
-## 🧪 Testing
-
-The `tests/` directory contains unit and integration tests using `pytest`.
-
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage report
-pytest tests/ --cov=. --cov-report=html
-
-# Run a specific test module
-pytest tests/test_ingestion.py -v
-
-# Run tests matching a keyword
-pytest tests/ -k "test_rbac" -v
-```
-
-**Test Modules:**
-
-| Module | Coverage |
-|---|---|
-| `test_auth.py` | JWT creation/validation, login flow, token blacklisting, role checking |
-| `test_ingestion.py` | Each extractor's output, chunker overlap behavior, embedder output shape |
-| `test_retrieval.py` | RBAC filter construction, ANN search result filtering, re-ranking order |
-| `test_query.py` | Custom Q&A match, full RAG pipeline end-to-end, cache hit/miss behavior |
-
-Tests use mock Qdrant and Redis instances to avoid requiring live infrastructure during CI.
-
 ---
 
 ## 🔧 Scripts & Utilities
@@ -899,7 +863,7 @@ Contributions are welcome. Please follow these guidelines:
 
 1. Fork the repository and create a feature branch (`git checkout -b feature/your-feature`).
 2. Follow PEP 8 for Python code. Use `black` for formatting and `flake8` for linting.
-3. Write tests for new functionality. Maintain coverage above 80%.
+3. Ensure new functionality is well-documented with clear docstrings and inline comments.
 4. Update this README and any relevant docstrings for new features.
 5. Open a Pull Request with a clear description of the change and its motivation.
 
@@ -908,16 +872,13 @@ Contributions are welcome. Please follow these guidelines:
 ```bash
 # Install development dependencies
 pip install -r requirements.txt
-pip install black flake8 pytest pytest-cov pytest-asyncio
+pip install black flake8
 
 # Run linter
 flake8 . --max-line-length=100 --exclude=venv,__pycache__
 
 # Run formatter
 black . --line-length=100
-
-# Run tests with coverage
-pytest tests/ --cov=. --cov-report=term-missing
 ```
 
 ---
