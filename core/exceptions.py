@@ -309,7 +309,7 @@ class DatabaseError(GreenBaseException):
         super().__init__(
             message=message,
             error_code=kwargs.get("error_code", ErrorCode.DATABASE_ERROR),
-            http_status=500,
+            http_status=kwargs.get("http_status", 500),
             details=kwargs.get("details", {})
         )
 

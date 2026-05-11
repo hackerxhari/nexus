@@ -68,9 +68,16 @@ class LoginResponse(BaseModel):
     user: UserResponse
 
 
+class Citation(BaseModel):
+    """A single citation: a source filename plus the pages it covers."""
+    file: str
+    pages: List[int] = []
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: List[str]
+    citations: List[Citation] = []
     chunks_retrieved: int
     cache_hit: bool
     performance: Dict[str, float]

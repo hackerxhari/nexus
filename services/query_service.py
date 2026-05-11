@@ -89,6 +89,7 @@ class QueryService:
             return {
                 "answer": result.answer,
                 "sources": result.sources,
+                "citations": result.citations,
                 "chunks_retrieved": result.chunks_retrieved,
                 "cache_hit": result.cache_hit,
                 "performance": {

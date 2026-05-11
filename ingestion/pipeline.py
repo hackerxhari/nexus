@@ -5,9 +5,14 @@ This is the single entry point for all document ingestion.
 """
 
 import os
+import re
 import time
 import uuid
 from typing import List, Optional
+
+# Matches the page markers inserted by the PDF extractor.
+# Kept in sync with ingestion.extractors.pdf.PAGE_MARKER_FORMAT.
+_PAGE_MARKER_RE = re.compile(r"<<NEXUS_PAGE:(\d+)>>")
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -199,6 +204,25 @@ class IngestionPipeline:
             if not chunks:
                 raise EmptyDocumentError(filename)
 
+            # ── Step 4b: Tag chunks with page numbers ─────────
+            # PDF extractor injects <<NEXUS_PAGE:N>> markers; carry
+            # the current page across chunks so even chunks without a
+            # marker get the correct page from the preceding chunk.
+            chunk_pages: List[List[int]] = []
+            current_page: Optional[int] = None
+            for chunk in chunks:
+                pages_in_chunk: List[int] = []
+                for match in _PAGE_MARKER_RE.finditer(chunk.text):
+                    page_num = int(match.group(1))
+                    if not pages_in_chunk or pages_in_chunk[-1] != page_num:
+                        pages_in_chunk.append(page_num)
+                    current_page = page_num
+                if not pages_in_chunk and current_page is not None:
+                    pages_in_chunk = [current_page]
+                # Strip markers from the chunk text before embedding
+                chunk.text = _PAGE_MARKER_RE.sub("", chunk.text).strip()
+                chunk_pages.append(pages_in_chunk)
+
             # ── Step 5: Embed ─────────────────────────────────
             with TimedOperation(
                 logger,
@@ -230,7 +254,8 @@ class IngestionPipeline:
                             "allowed_roles": allowed_roles,
                             "word_count": chunks[i].word_count,
                             "topic_id": doc_topic_id,
-                            "topic_ancestors": topic_ancestors
+                            "topic_ancestors": topic_ancestors,
+                            "pages": chunk_pages[i]
                         }
                     )
                     for i in range(len(chunks))

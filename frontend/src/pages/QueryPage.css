@@ -170,6 +170,11 @@
   font-family: var(--font-mono);
 }
 
+.query-msg__source-pages {
+  opacity: 0.75;
+  margin-left: 2px;
+}
+
 /* Meta badges */
 .query-msg__meta {
   margin-top: 10px;

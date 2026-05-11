@@ -373,7 +373,8 @@ class QueryResult:
         embedding_time_ms: float,
         retrieval_time_ms: float,
         llm_time_ms: float,
-        retrieved_chunks: Optional[List[SearchResult]] = None
+        retrieved_chunks: Optional[List[SearchResult]] = None,
+        citations: Optional[List[Dict[str, Any]]] = None
     ):
         self.answer = answer
         self.sources = sources
@@ -384,11 +385,13 @@ class QueryResult:
         self.retrieval_time_ms = retrieval_time_ms
         self.llm_time_ms = llm_time_ms
         self.retrieved_chunks = retrieved_chunks or []
+        self.citations = citations or []
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "answer": self.answer,
             "sources": self.sources,
+            "citations": self.citations,
             "chunks_retrieved": self.chunks_retrieved,
             "cache_hit": self.cache_hit,
             "response_time_ms": round(self.response_time_ms, 2),
@@ -396,6 +399,64 @@ class QueryResult:
             "retrieval_time_ms": round(self.retrieval_time_ms, 2),
             "llm_time_ms": round(self.llm_time_ms, 2)
         }
+
+
+def _build_citations(
+    results: List[SearchResult],
+    used_sources: List[str]
+) -> List[Dict[str, Any]]:
+    """
+    Build citation entries {file, pages} aggregated per source.
+    Page numbers come from the Qdrant payload populated at ingestion.
+    """
+    by_file: Dict[str, List[int]] = {}
+    for r in results:
+        clean = _clean_source_name(r.source_file)
+        if clean not in used_sources:
+            continue
+        pages = getattr(r, "pages", []) or []
+        bucket = by_file.setdefault(clean, [])
+        for p in pages:
+            if isinstance(p, int) and p not in bucket:
+                bucket.append(p)
+
+    citations: List[Dict[str, Any]] = []
+    for clean in used_sources:
+        pages = sorted(by_file.get(clean, []))
+        citations.append({"file": clean, "pages": pages})
+    return citations
+
+
+def _history_rerank(
+    results: List[SearchResult],
+    conversation_history: Optional[List[Dict[str, str]]],
+    weight: float = 0.08
+) -> List[SearchResult]:
+    """
+    Light-weight history-aware re-ranking.
+    Boosts chunks whose text overlaps with terms from prior turns so that
+    follow-up questions keep returning the same threads of context.
+    Does not call the LLM and does not touch the vector store.
+    """
+    if not conversation_history:
+        return results
+
+    terms = set()
+    for turn in conversation_history:
+        content = (turn.get("content") or "").lower()
+        for token in re.findall(r"[a-z0-9_]{4,}", content):
+            terms.add(token)
+    if not terms:
+        return results
+
+    def boosted(result: SearchResult) -> float:
+        text_lower = result.text.lower()
+        hits = sum(1 for term in terms if term in text_lower)
+        if hits == 0:
+            return result.score
+        return result.score + min(weight, weight * hits / 5.0)
+
+    return sorted(results, key=boosted, reverse=True)
 
 
 class QueryEngine:
@@ -545,7 +606,8 @@ class QueryEngine:
                     response_time_ms=total_time,
                     embedding_time_ms=0,
                     retrieval_time_ms=0,
-                    llm_time_ms=0
+                    llm_time_ms=0,
+                    citations=cached.get("citations", [])
                 )
 
         # -- Step 2: Embed Question ---------------------------------
@@ -598,6 +660,10 @@ class QueryEngine:
 
         # -- Step 4b: Prefer chunks containing the name query -------
         results = _rerank_results_by_name_query(question, results)
+        # History-aware re-ranking — gently boosts chunks that overlap
+        # with terms used earlier in the conversation so follow-ups stay
+        # anchored to the same thread.
+        results = _history_rerank(results, conversation_history)
         results = _filter_results_by_score(results)
         if not results:
             total_time = (time.perf_counter() - total_start) * 1000
@@ -766,9 +832,12 @@ class QueryEngine:
             for role in (r.allowed_roles or [])
         })
 
+        citations = _build_citations(results, used_sources)
+
         cache_payload = {
             "answer": answer,
             "sources": used_sources,
+            "citations": citations,
             "chunks_retrieved": len(context_chunks),
             "allowed_roles_union": allowed_roles_union
         }
@@ -788,7 +857,8 @@ class QueryEngine:
             embedding_time_ms=embedding_time_ms,
             retrieval_time_ms=retrieval_time_ms,
             llm_time_ms=llm_time_ms,
-            retrieved_chunks=results
+            retrieved_chunks=results,
+            citations=citations
         )
 
         logger.info(

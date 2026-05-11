@@ -48,6 +48,7 @@ class SearchResult:
         self.word_count = point.payload.get("word_count", 0)
         self.topic_id = point.payload.get("topic_id")
         self.topic_ancestors = point.payload.get("topic_ancestors", [])
+        self.pages = point.payload.get("pages", []) or []
         self.payload = point.payload
 
     def to_dict(self) -> Dict[str, Any]:

@@ -22,6 +22,10 @@ logger = get_logger(__name__)
 # Minimum characters per page to consider it "has text"
 MIN_CHARS_PER_PAGE = 20
 
+# Inline marker that lets the pipeline tag chunks with the originating
+# PDF page. The marker is stripped before chunks reach the vector store.
+PAGE_MARKER_FORMAT = "<<NEXUS_PAGE:{page}>>"
+
 
 class PDFExtractor(BaseExtractor):
 
@@ -54,10 +58,11 @@ class PDFExtractor(BaseExtractor):
                 for page_num, page in enumerate(pdf.pages, start=1):
                     try:
                         page_text = page.extract_text() or ""
+                        marker = PAGE_MARKER_FORMAT.format(page=page_num)
 
                         if len(page_text.strip()) >= MIN_CHARS_PER_PAGE:
                             # Digital page — use extracted text
-                            full_text.append(page_text)
+                            full_text.append(f"{marker}\n{page_text}")
                         else:
                             # Scanned page — fall back to OCR
                             logger.debug(
@@ -67,7 +72,7 @@ class PDFExtractor(BaseExtractor):
                             )
                             ocr_text = self._ocr_page(page)
                             if ocr_text.strip():
-                                full_text.append(ocr_text)
+                                full_text.append(f"{marker}\n{ocr_text}")
                                 ocr_pages.append(page_num)
                             else:
                                 warnings.append(
