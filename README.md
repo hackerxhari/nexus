@@ -30,6 +30,7 @@
 - [Scripts & Utilities](#-scripts--utilities)
 - [Frontend Overview](#-frontend-overview)
 - [Deployment](#-deployment)
+- [Roadmap & Future Enhancements](#-roadmap--future-enhancements)
 - [Contributing](#-contributing)
 
 ---
@@ -70,6 +71,7 @@ Nexus enforces a multi-tiered **Role-Based Access Control (RBAC)** model, ensuri
 - **Modern React Frontend:** A sleek, dark-mode UI built with React 18 and Vite, featuring Framer Motion animations, an intuitive chat interface, and a full administrative dashboard.
 - **Redis Caching:** LLM responses and frequently accessed data are cached in Redis to dramatically reduce latency for repeated queries and to support rate limiting per user.
 - **Offline / Edge Ready:** The entire stack — from embedding to LLM inference to speech recognition — can run on-premise without any internet connectivity.
+- **Conversational Context *(in progress)*:** A lightweight multi-turn context window is partially implemented across the stack. The frontend captures the last 3 conversation turns (`getConversationHistory`), the API schema accepts a `conversation_history` payload (`ConversationTurn[]`), and the prompt builder injects a `PREVIOUS CONVERSATION` block into the LLM prompt. This enables follow-up questions within a session (e.g., "Tell me more about that") without repeating the full context. The feature is functional but not yet stabilised for production use — see [Roadmap](#-roadmap--future-enhancements) for planned improvements.
 
 ---
 
@@ -854,6 +856,37 @@ Internet → Firewall/VPN → nginx (TLS) → FastAPI (Uvicorn, 4 workers)
 ```
 
 For high-availability deployments, Qdrant supports distributed mode and replication. Redis can be deployed as a cluster. FastAPI workers can be scaled horizontally behind a load balancer.
+
+---
+
+## 🔮 Roadmap & Future Enhancements
+
+The following capabilities are planned or actively being developed. They are **not yet production-ready** and should not be relied upon in regulated deployments.
+
+### 💬 Full Multi-Turn Conversation History *(primary in-progress feature)*
+
+Nexus currently implements a foundational conversational context pipeline that sends the last 3 session turns to the LLM. The planned full implementation will include:
+
+| Milestone | Status | Description |
+|---|:---:|---|
+| Frontend context capture (`getConversationHistory`) | ✅ Done | Captures last 6 messages (3 turns) from the in-memory chat state |
+| API schema (`ConversationTurn`, `conversation_history` field) | ✅ Done | Validated Pydantic model with a hard cap of 6 entries |
+| Prompt injection (`PREVIOUS CONVERSATION` block) | ✅ Done | History inserted into the RAG prompt before the question |
+| Server-side session persistence | ⏳ Planned | Store conversation turns in Redis keyed by `session_id`, so history survives page reloads and works across devices |
+| Per-user conversation thread management | ⏳ Planned | Named threads (like ChatGPT conversations) stored in SQLite, browseable from the Chat UI |
+| History-aware retrieval re-ranking | ⏳ Planned | Use conversation history to bias Qdrant ANN search — earlier context boosts relevance of related chunks in follow-up queries |
+| Admin visibility into user sessions | ⏳ Planned | Audit log extension to record `session_id` alongside each query for compliance tracing |
+| History truncation strategy | ⏳ Planned | Summarise older turns instead of hard-truncating, preserving context without blowing the LLM context window |
+
+**Current limitation:** History is stored only in the browser's `localStorage`. If the user clears storage, opens a new tab, or queries from a different device, no prior context is available. The LLM therefore treats each session as independent.
+
+### Other Planned Features
+
+- **Document Versioning:** Track multiple versions of the same document; queries can be pinned to a specific version or always resolve to the latest.
+- **Streaming LLM Responses:** Stream tokens back to the frontend in real-time using Server-Sent Events (SSE) instead of waiting for the full response.
+- **Multi-Language Support:** Embed and query documents in languages other than English using multilingual `sentence-transformers` models.
+- **Plugin / Tool Calling:** Allow the LLM to invoke internal tools (e.g., fetch a live HR record, run a calculation) when the knowledge base alone is insufficient.
+- **Granular Document Expiry:** Automatically retire documents after a configurable TTL and re-prompt uploaders to renew outdated content.
 
 ---
 
