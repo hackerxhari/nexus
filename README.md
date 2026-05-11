@@ -350,14 +350,10 @@ nexus/
 │
 ├── pytest.ini                    # pytest configuration (testpaths, asyncio mode)
 │
-├── models/                       # On-disk model files (LLM GGUFs, embedding model, Vosk models)
-├── uploads/                      # Uploaded documents (gitignored)
-├── logs/                         # Structured logs (gitignored)
-├── data/                         # Local data artifacts
-│
-├── docker-compose.yml            # Qdrant + Redis services
-├── requirements.txt              # Full pinned dependency list
-├── req.txt                       # Mirror of requirements.txt
+├── .gitignore
+├── .gitattributes
+├── requirements.txt              # Full pinned dependency list (152 packages)
+├── req.txt                       # Minimal/core dependency list
 └── README.md
 ```
 
@@ -1022,26 +1018,33 @@ npm run preview    # serve the production build locally
 The bundled `docker-compose.yml` brings up Qdrant and Redis with persistent volumes and health checks. The FastAPI backend and React frontend are run separately during development (and behind your own reverse proxy in production).
 
 ```yaml
-version: "3.9"
+version: '3.8'
 
 services:
+  nexus-api:
+    build: .
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_HOST=qdrant
+      - REDIS_URL=redis://redis:6379/0
+      - LLM_PROVIDER=ollama
+    volumes:
+      - ./nexus.db:/app/nexus.db
+      - ./uploads:/app/uploads
+    depends_on:
+      - qdrant
+      - redis
+
   qdrant:
     image: qdrant/qdrant:latest
     container_name: nexus-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
-    environment:
-      QDRANT__LOG_LEVEL: INFO
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 10s
 
   redis:
     image: redis:7-alpine
@@ -1051,27 +1054,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
 
 volumes:
   qdrant_storage:
     driver: local
   redis_data:
-    driver: local
-```
-
-Usage:
-
-```bash
-docker compose up -d      # start Qdrant + Redis
-docker compose down       # stop and remove containers
-docker compose down -v    # also wipe volumes (DESTRUCTIVE)
 ```
 
 ### Recommended Production Architecture
