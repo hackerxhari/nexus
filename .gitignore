@@ -1,0 +1,41 @@
+# Model files
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+venv/
+.venv/
+.env
+.env.*
+
+# Tests & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+*.log
+
+# Uploads
+uploads/
+
+# Node/Data
+data/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+models/

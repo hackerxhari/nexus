@@ -1,0 +1,57 @@
+.departments-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.departments-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 2rem;
+}
+
+.departments-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.departments-table th {
+  text-align: left;
+  padding: 1rem 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.departments-table td {
+  padding: 1.25rem 1.5rem;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.departments-table__name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.departments-table__action {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.departments-table__action:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}
