@@ -28,6 +28,7 @@ export default function UploadPage() {
   const [departments, setDepartments] = useState([])
   const [selectedDepartments, setSelectedDepartments] = useState([])
 
+  const [hierarchy, setHierarchy] = useState(1)
   const [documentName, setDocumentName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState(null)
