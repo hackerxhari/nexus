@@ -346,15 +346,14 @@ nexus/
 │
 ├── pytest.ini                    # pytest configuration (testpaths, asyncio mode)
 │
-├── models/                       # On-disk model files (LLM GGUFs, embedding model, Vosk models)
+├── models/                       # On-disk model files (embedding model + Vosk STT models)
 ├── uploads/                      # Uploaded documents (gitignored)
 ├── logs/                         # Structured logs (gitignored)
 ├── data/                         # Local data artifacts
 │
 ├── docker-compose.yml            # Qdrant + Redis services
-├── docker-compose.yml            # Docker for Redis and Qdrant
-├── requirements.txt              # Full pinned dependency list
-├── req.txt                       # Mirror of requirements.txt
+├── requirements.txt              # Pinned dependency list (with test deps)
+├── req.txt                       # Pinned dependency list (runtime-focused snapshot)
 └── README.md
 ```
 
@@ -469,7 +468,7 @@ Also exposes `build_no_results_response`, `build_disambiguation_response`, `buil
 - **`ingest_service.py`** — Coordinates upload → extraction → chunking → embedding → Qdrant upsert → SQLite record, with cleanup on partial failure.
 - **`custom_qa_service.py`** — `RapidFuzz` lookup against the active custom Q&A pairs; threshold via `CUSTOM_QA_SIMILARITY_THRESHOLD`.
 - **`topic_service.py`** — Builds and resolves the topic tree used for optional topic-scoped retrieval.
-- **`stt_service.py`** — Vosk wrapper supporting both one-shot transcription and live WebSocket streaming with prewarm.
+- **`stt_service.py`** — Vosk singleton supporting both one-shot transcription (`transcribe(bytes)`) and live WebSocket streaming (`create_recognizer(sample_rate)`). The model loads once on import; the `/stt/stream` route exposes a `prewarm=1` query param to warm the WebSocket path without sending audio.
 
 ---
 
@@ -590,7 +589,7 @@ docker run -d -p 6333:6333 -p 6334:6334 \
 docker run -d -p 6379:6379 redis:7-alpine
 
 ollama serve
-ollama pull llama3      # or any other supported model
+ollama pull phi3:mini    # matches the default OLLAMA_MODEL; swap for any supported model
 ```
 
 ### 2. Clone the Repository
@@ -727,7 +726,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 # ── Speech-to-Text ─────────────────────────────────────────────
 VOSK_ENABLED=true
 VOSK_LANGUAGE=en
-VOSK_MODEL_PATH=models/vosk-model-small-en-us-0.15
+VOSK_MODEL_PATH=models/vosk-model-en-in-0.5
 
 # ── Rate Limiting ──────────────────────────────────────────────
 RATE_LIMIT_PER_MINUTE=10
@@ -950,7 +949,7 @@ pytest --cov=. --cov-report=term-missing
 ### Current results
 
 ```
-============================ 74 passed in 70s ============================
+============================ 74 passed in 8s ============================
 ```
 
 ### Design notes
