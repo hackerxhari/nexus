@@ -40,7 +40,7 @@
 
 Modern enterprises generate vast amounts of internal knowledge — policy documents, HR manuals, engineering specs, spreadsheets, presentations, and more. Nexus transforms this scattered, static content into a dynamic, queryable AI-powered knowledge base.
 
-Unlike cloud-based solutions, Nexus is designed from the ground up with **data sovereignty** as a first principle. It runs entirely within your internal network using local LLM inference (via [Ollama](https://ollama.com/) or [AirLLM](https://github.com/lyogavin/airllm)), a local speech-to-text engine ([Vosk](https://alphacephei.com/vosk/)), and a self-hosted vector database (Qdrant). Sensitive corporate data never transits an external network boundary — there are **no** Google Cloud, OpenAI, Anthropic, or other third-party SaaS dependencies in the runtime path.
+Unlike cloud-based solutions, Nexus is designed from the ground up with **data sovereignty** as a first principle. It runs entirely within your internal network using local LLM inference via [Ollama](https://ollama.com/), a local speech-to-text engine ([Vosk](https://alphacephei.com/vosk/)), and a self-hosted vector database (Qdrant). Sensitive corporate data never transits an external network boundary — there are **no** Google Cloud, OpenAI, Anthropic, or other third-party SaaS dependencies in the runtime path.
 
 Nexus enforces a multi-tiered **Role-Based Access Control (RBAC)** model, ensuring that employees can only retrieve answers from documents that their specific role and department explicitly authorize them to access. Every interaction is logged for compliance and audit purposes.
 
@@ -121,7 +121,6 @@ Nexus is a **FastAPI Python backend** and a **React frontend**, connected via a 
                                     │         /llm             │
                                     │   PromptBuilder          │
                                     │   Ollama Client          │
-                                    │   AirLLM Client          │
                                     └─────────────────────────┘
 ```
 
@@ -139,7 +138,7 @@ Nexus is a **FastAPI Python backend** and a **React frontend**, connected via a 
    - Re-enforces RBAC at the application layer as defense in depth.
    - Optionally executes a multi-hop search keyed on identifiers extracted from the first-hop chunks.
 5. **`PromptBuilder.build_rag_prompt`** assembles the system rules, prior conversation, and labeled context.
-6. **`OllamaClient` / `AirLLMClient`** generates the answer.
+6. **`OllamaClient`** generates the answer.
 7. The result + structured `citations` (file + page numbers) is cached in Redis and returned.
 8. The full interaction is recorded in the `audit_logs` table.
 
@@ -169,8 +168,7 @@ Nexus is a **FastAPI Python backend** and a **React frontend**, connected via a 
 | Vector DB | Qdrant 1.17 | ANN vector search with payload filtering |
 | Cache / Sessions | Redis 7.2 | Query cache, rate limiting, token blacklist |
 | Embeddings | sentence-transformers 5.2 | Dense text embeddings (`all-MiniLM-L6-v2` default) |
-| Local LLM | Ollama 0.6 | Default on-prem LLM provider |
-| Alternative LLM | AirLLM 2.11 | Layer-by-layer inference for large models on modest GPUs |
+| Local LLM | Ollama 0.6 | On-prem LLM provider |
 | PDF Extraction | pdfplumber, pdfminer.six, pypdf | Native PDF text extraction |
 | OCR | pytesseract | Local OCR fallback for scanned PDFs and images (no cloud API) |
 | Word Docs | python-docx 1.2 | `.docx` parsing |
@@ -183,7 +181,6 @@ Nexus is a **FastAPI Python backend** and a **React frontend**, connected via a 
 | Data Validation | pydantic 2.12 | Request/response schemas |
 | Logging | structlog 25.5 | Structured logs |
 | ML Framework | torch 2.10, transformers 5.2 | Model inference |
-| NLP | spacy 3.8 | Sentence-aware preprocessing |
 | DL Optimization | accelerate 1.13, optimum 2.1 | Optimized inference |
 | STT | Vosk (local) | Speech-to-text |
 
@@ -315,7 +312,6 @@ nexus/
 ├── llm/
 │   ├── base.py                   # LLMClient ABC + LLMResponse dataclass
 │   ├── ollama_client.py          # HTTP client with prewarm + retries
-│   ├── airllm_client.py          # Layer-by-layer inference client
 │   └── prompt_builder.py         # RAG prompt, no-results prompt, disambiguation prompt
 │
 ├── retrieval/
@@ -464,8 +460,6 @@ Also exposes `build_no_results_response`, `build_disambiguation_response`, `buil
 
 **`ollama_client.py`** — HTTP client for `http://OLLAMA_HOST` with prewarm, retries, and configurable generation params (`OLLAMA_NUM_PREDICT`, `OLLAMA_TEMPERATURE`, `OLLAMA_NUM_CTX`, `OLLAMA_TOP_P/TOP_K/REPEAT_PENALTY`).
 
-**`airllm_client.py`** — Alternative backend for memory-efficient large-model inference. Selected via `LLM_PROVIDER=airllm`.
-
 ---
 
 ### `/services` — Business Logic
@@ -532,7 +526,7 @@ QueryService.ask(...)
         ├─ Score-floor + Application-layer RBAC re-enforcement
         ├─ Optional multi-hop retrieval on extracted identifiers
         ├─ PromptBuilder.build_rag_prompt (history + numbered context)
-        ├─ LLMClient.generate(prompt)  ──► Ollama or AirLLM
+        ├─ LLMClient.generate(prompt)  ──► Ollama
         ├─ Build citations [{file, pages: sorted, deduped}]
         ├─ Cache in Redis (answer + sources + citations + role union)
         └─ Audit-log the request
@@ -686,7 +680,6 @@ REDIS_EMBEDDING_CACHE_TTL=86400
 REDIS_MAX_CONNECTIONS=10
 
 # ── LLM ────────────────────────────────────────────────────────
-LLM_PROVIDER=ollama                # ollama | airllm
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=phi3:mini
 OLLAMA_TIMEOUT=120
@@ -694,11 +687,6 @@ OLLAMA_PREWARM=true
 OLLAMA_NUM_PREDICT=256
 OLLAMA_TEMPERATURE=0.1
 OLLAMA_NUM_CTX=2048
-
-AIRLLM_MODEL=models/qwen2.5-3b-instruct-q4_k_m.gguf
-AIRLLM_DEVICE=cpu
-AIRLLM_MAX_SEQ_LEN=2048
-AIRLLM_MAX_NEW_TOKENS=96
 
 # ── Embeddings ─────────────────────────────────────────────────
 EMBEDDING_MODEL=all-MiniLM-L6-v2
@@ -901,7 +889,7 @@ Nexus implements a hierarchical RBAC model. The hierarchy levels (from `RoleChec
 
 ### Data Security
 - **Zero-Trust Vector Retrieval.** RBAC filters are applied at the Qdrant query level (Qdrant returns nothing the user can't see), then re-enforced application-side. The LLM never receives unauthorized chunks.
-- **No External Data Transmission.** All LLM inference (Ollama / AirLLM), embedding (sentence-transformers), and OCR (pytesseract) run locally. No document content, queries, or responses are sent to any third-party API.
+- **No External Data Transmission.** All LLM inference (Ollama), embedding (sentence-transformers), and OCR (pytesseract) run locally. No document content, queries, or responses are sent to any third-party API.
 - **Append-Only Audit Logs.** Every query and admin write is recorded with user id, IP, request id, timing breakdown, and result status.
 
 ### Compliance Considerations

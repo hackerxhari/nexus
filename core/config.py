@@ -118,28 +118,6 @@ class OllamaSettings(BaseSettings):
     repeat_penalty: float = Field(default=1.1, alias="OLLAMA_REPEAT_PENALTY")
 
 
-class AirLLMSettings(BaseSettings):
-    """GGUF model settings for llama-cpp-python."""
-    model: str = Field(
-        default="models/qwen2.5-3b-instruct-q4_k_m.gguf",
-        alias="AIRLLM_MODEL"
-    )
-    device: str = Field(default="cpu", alias="AIRLLM_DEVICE")
-    max_seq_len: int = Field(default=2048, alias="AIRLLM_MAX_SEQ_LEN")
-    max_new_tokens: int = Field(default=96, alias="AIRLLM_MAX_NEW_TOKENS")
-    compression: Optional[str] = Field(
-        default=None,
-        alias="AIRLLM_COMPRESSION",
-        description="Set to '4bit' or '8bit' for faster inference"
-    )
-    max_retries: int = Field(default=2, alias="AIRLLM_MAX_RETRIES")
-    hf_token: Optional[str] = Field(
-        default=None,
-        alias="HF_TOKEN",
-        description="HuggingFace API token for gated models"
-    )
-
-
 class EmbeddingSettings(BaseSettings):
     """Embedding model settings."""
     model: str = Field(
@@ -259,18 +237,6 @@ class Settings(BaseSettings):
     OLLAMA_TOP_P: float = 0.9
     OLLAMA_TOP_K: int = 40
     OLLAMA_REPEAT_PENALTY: float = 1.1
-
-    # AirLLM
-    AIRLLM_MODEL: str = "models/qwen2.5-3b-instruct-q4_k_m.gguf"
-    AIRLLM_DEVICE: str = "cpu"
-    AIRLLM_MAX_SEQ_LEN: int = 2048
-    AIRLLM_MAX_NEW_TOKENS: int = 96
-    AIRLLM_COMPRESSION: Optional[str] = None
-    AIRLLM_MAX_RETRIES: int = 2
-    HF_TOKEN: Optional[str] = None
-
-    # LLM Provider — set to 'airllm' or 'ollama'
-    LLM_PROVIDER: str = "ollama"
 
     # Embeddings
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"

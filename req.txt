@@ -1,6 +1,5 @@
 accelerate==1.13.0
 aiofiles==25.1.0
-airllm==2.11.0
 alembic==1.18.4
 annotated-doc==0.0.4
 annotated-types==0.7.0
@@ -118,9 +117,6 @@ slowapi==0.1.9
 smart_open==7.5.1
 sounddevice==0.5.5
 soupsieve==2.8.3
-spacy==3.8.11
-spacy-legacy==3.0.12
-spacy-loggers==1.0.5
 SQLAlchemy==2.0.48
 srsly==2.5.2
 starlette==0.52.1

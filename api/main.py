@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     vector_store.initialize()
     embedding_model.load()  # Load once — stays in memory
 
-    if settings.LLM_PROVIDER == "ollama" and settings.OLLAMA_PREWARM:
+    if settings.OLLAMA_PREWARM:
         from llm.ollama_client import ollama_client
         ollama_client.prewarm()
 

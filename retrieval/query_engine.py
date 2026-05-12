@@ -28,21 +28,9 @@ _settings = get_settings()
 
 
 def _get_llm_client():
-    """Return the configured LLM client (airllm or ollama)."""
-    if _settings.LLM_PROVIDER == "airllm":
-        try:
-            from llm.airllm_client import airllm_client
-            return airllm_client
-        except ModuleNotFoundError as e:
-            logger.warning(
-                "airllm_unavailable_fallback_ollama",
-                error=str(e)
-            )
-            from llm.ollama_client import ollama_client
-            return ollama_client
-    else:
-        from llm.ollama_client import ollama_client
-        return ollama_client
+    """Return the Ollama LLM client."""
+    from llm.ollama_client import ollama_client
+    return ollama_client
 
 
 _UUID_PREFIX_RE = re.compile(
