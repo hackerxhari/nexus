@@ -40,7 +40,7 @@
 
 Modern enterprises generate vast amounts of internal knowledge — policy documents, HR manuals, engineering specs, spreadsheets, presentations, and more. Nexus transforms this scattered, static content into a dynamic, queryable AI-powered knowledge base.
 
-Unlike cloud-based solutions, Nexus is designed from the ground up with **data sovereignty** as a first principle. It runs entirely within your internal network using local LLM inference (via [Ollama](https://ollama.com/) or [AirLLM](https://github.com/lyogavin/airllm)), a local speech-to-text engine (Moonshine / Vosk), and a self-hosted vector database (Qdrant). Sensitive corporate data never transits an external network boundary — there are **no** Google Cloud, OpenAI, Anthropic, or other third-party SaaS dependencies in the runtime path.
+Unlike cloud-based solutions, Nexus is designed from the ground up with **data sovereignty** as a first principle. It runs entirely within your internal network using local LLM inference (via [Ollama](https://ollama.com/) or [AirLLM](https://github.com/lyogavin/airllm)), a local speech-to-text engine ([Vosk](https://alphacephei.com/vosk/)), and a self-hosted vector database (Qdrant). Sensitive corporate data never transits an external network boundary — there are **no** Google Cloud, OpenAI, Anthropic, or other third-party SaaS dependencies in the runtime path.
 
 Nexus enforces a multi-tiered **Role-Based Access Control (RBAC)** model, ensuring that employees can only retrieve answers from documents that their specific role and department explicitly authorize them to access. Every interaction is logged for compliance and audit purposes.
 
@@ -75,7 +75,7 @@ Nexus enforces a multi-tiered **Role-Based Access Control (RBAC)** model, ensuri
 
 ### User Experience
 
-- **Speech-to-Text (STT):** Local Moonshine engine wrapped by [`services/stt_service.py`](services/stt_service.py). Two endpoints: `POST /api/v1/stt/transcribe` for buffered audio, and a `WS /api/v1/stt/stream` WebSocket for live, low-latency streaming. The frontend pre-warms a WebSocket on page load so the first utterance has no cold-start latency.
+- **Speech-to-Text (STT):** Local Vosk engine wrapped by [`services/stt_service.py`](services/stt_service.py). Two endpoints: `POST /api/v1/stt/transcribe` for buffered audio, and a `WS /api/v1/stt/stream` WebSocket for live, low-latency streaming. The frontend pre-warms a WebSocket on page load so the first utterance has no cold-start latency.
 - **Modern React Frontend:** React 18 + Vite, Framer Motion animations, react-three-fiber landing scene, dark theme, and a typewriter-style answer renderer ([`components/TypewriterMessage.jsx`](frontend/src/components/TypewriterMessage.jsx)) that displays sources with collapsed page ranges.
 - **Redis Caching:** Query results (answer + sources + citations + role union) cached by normalized question hash. Cache hits short-circuit the entire pipeline.
 - **Offline / Edge Ready:** The full stack — embedding, LLM, STT — runs on-prem with zero internet egress.
@@ -185,7 +185,7 @@ Nexus is a **FastAPI Python backend** and a **React frontend**, connected via a 
 | ML Framework | torch 2.10, transformers 5.2 | Model inference |
 | NLP | spacy 3.8 | Sentence-aware preprocessing |
 | DL Optimization | accelerate 1.13, optimum 2.1 | Optimized inference |
-| STT | Moonshine (local) | Speech-to-text |
+| STT | Vosk (local) | Speech-to-text |
 
 ### Frontend
 
@@ -337,7 +337,7 @@ nexus/
 │   ├── query_service.py          # Rate limit + RAG + audit logging
 │   ├── custom_qa_service.py      # Fuzzy-match lookup for custom Q&A pairs
 │   ├── topic_service.py          # Topic-tree clustering for filtering and grouping
-│   └── stt_service.py            # Moonshine wrapper (transcribe + streaming)
+│   └── stt_service.py            # Vosk wrapper (transcribe + streaming)
 │
 ├── tests/                        # pytest suite (pure-unit, no external services)
 │   ├── conftest.py               # Shared fixtures + minimal env bootstrap
@@ -350,10 +350,15 @@ nexus/
 │
 ├── pytest.ini                    # pytest configuration (testpaths, asyncio mode)
 │
-├── .gitignore
-├── .gitattributes
-├── requirements.txt              # Full pinned dependency list (152 packages)
-├── req.txt                       # Minimal/core dependency list
+├── models/                       # On-disk model files (LLM GGUFs, embedding model, Vosk models)
+├── uploads/                      # Uploaded documents (gitignored)
+├── logs/                         # Structured logs (gitignored)
+├── data/                         # Local data artifacts
+│
+├── docker-compose.yml            # Qdrant + Redis services
+├── docker-compose.yml            # Docker for Redis and Qdrant
+├── requirements.txt              # Full pinned dependency list
+├── req.txt                       # Mirror of requirements.txt
 └── README.md
 ```
 
@@ -470,7 +475,7 @@ Also exposes `build_no_results_response`, `build_disambiguation_response`, `buil
 - **`ingest_service.py`** — Coordinates upload → extraction → chunking → embedding → Qdrant upsert → SQLite record, with cleanup on partial failure.
 - **`custom_qa_service.py`** — `RapidFuzz` lookup against the active custom Q&A pairs; threshold via `CUSTOM_QA_SIMILARITY_THRESHOLD`.
 - **`topic_service.py`** — Builds and resolves the topic tree used for optional topic-scoped retrieval.
-- **`stt_service.py`** — Moonshine wrapper supporting both one-shot transcription and live WebSocket streaming with prewarm.
+- **`stt_service.py`** — Vosk wrapper supporting both one-shot transcription and live WebSocket streaming with prewarm.
 
 ---
 
@@ -732,8 +737,9 @@ ALLOWED_IP_RANGES=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 # ── Speech-to-Text ─────────────────────────────────────────────
-MOONSHINE_ENABLED=true
-MOONSHINE_LANGUAGE=en
+VOSK_ENABLED=true
+VOSK_LANGUAGE=en
+VOSK_MODEL_PATH=models/vosk-model-small-en-us-0.15
 
 # ── Rate Limiting ──────────────────────────────────────────────
 RATE_LIMIT_PER_MINUTE=10
@@ -1018,34 +1024,42 @@ npm run preview    # serve the production build locally
 The bundled `docker-compose.yml` brings up Qdrant and Redis with persistent volumes and health checks. The FastAPI backend and React frontend are run separately during development (and behind your own reverse proxy in production).
 
 ```yaml
-version: '3.8'
+# ─────────────────────────────────────────────
+# Nexus — Infrastructure Services
+# Starts Qdrant (vector DB) and Redis (cache).
+# The FastAPI backend and React frontend are
+# run separately during development.
+#
+# Usage:
+#   docker compose up -d          # start both services in background
+#   docker compose down           # stop and remove containers
+#   docker compose down -v        # also wipe persistent volumes
+# ─────────────────────────────────────────────
+
+version: "3.9"
 
 services:
-  nexus-api:
-    build: .
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
-    ports:
-      - "8000:8000"
-    environment:
-      - QDRANT_HOST=qdrant
-      - REDIS_URL=redis://redis:6379/0
-      - LLM_PROVIDER=ollama
-    volumes:
-      - ./nexus.db:/app/nexus.db
-      - ./uploads:/app/uploads
-    depends_on:
-      - qdrant
-      - redis
 
+  # ── Qdrant Vector Database ──────────────────
   qdrant:
     image: qdrant/qdrant:latest
     container_name: nexus-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"
+      - "6333:6333"   # HTTP REST API
+      - "6334:6334"   # gRPC API
     volumes:
       - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
+  # ── Redis Cache & Session Store ─────────────
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
@@ -1054,11 +1068,21 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
+# ── Named Volumes ───────────────────────────
 volumes:
   qdrant_storage:
     driver: local
   redis_data:
+    driver: local
+
 ```
 
 ### Recommended Production Architecture
