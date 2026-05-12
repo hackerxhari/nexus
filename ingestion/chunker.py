@@ -5,6 +5,7 @@ Preserves sentence boundaries — never cuts mid-sentence.
 """
 
 import re
+import threading
 
 import numpy as np
 from dataclasses import dataclass, field
@@ -15,6 +16,68 @@ from core.logger import get_logger
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+
+# SpaCy sentence segmenter — lazy, process-wide singleton.
+# Loading a full statistical model is slow and unnecessary for our use:
+# we only need sentence boundaries. We try `en_core_web_sm` for higher-
+# fidelity segmentation if it's installed; otherwise we fall back to a
+# blank English pipeline with the rule-based `sentencizer` component.
+# As a last resort (if SpaCy itself is missing), we use a regex.
+_SPACY_NLP = None
+_SPACY_LOCK = threading.Lock()
+_SPACY_INIT_DONE = False
+_SENTENCE_REGEX = re.compile(r"(?<=[.!?])\s+")
+
+
+def _get_spacy_nlp():
+    """
+    Return a SpaCy `nlp` pipeline with sentence segmentation enabled,
+    or None if SpaCy isn't importable. Cached after first call.
+    """
+    global _SPACY_NLP, _SPACY_INIT_DONE
+    if _SPACY_INIT_DONE:
+        return _SPACY_NLP
+
+    with _SPACY_LOCK:
+        if _SPACY_INIT_DONE:
+            return _SPACY_NLP
+        try:
+            import spacy
+        except ImportError:
+            logger.warning("spacy_not_installed_falling_back_to_regex")
+            _SPACY_INIT_DONE = True
+            return None
+
+        nlp = None
+        try:
+            # Prefer the small statistical model if available — its
+            # segmenter handles abbreviations and headings better than
+            # the pure rule-based sentencizer.
+            nlp = spacy.load(
+                "en_core_web_sm",
+                disable=["ner", "tagger", "lemmatizer", "attribute_ruler"]
+            )
+            logger.info("spacy_loaded", pipeline="en_core_web_sm")
+        except (OSError, IOError):
+            try:
+                nlp = spacy.blank("en")
+                if "sentencizer" not in nlp.pipe_names:
+                    nlp.add_pipe("sentencizer")
+                logger.info("spacy_loaded", pipeline="blank_en+sentencizer")
+            except Exception as e:
+                logger.warning("spacy_init_failed", error=str(e))
+                nlp = None
+
+        # SpaCy's default `max_length` is 1,000,000 chars — that's fine
+        # for our chunk-sized inputs but we bump it slightly so a stray
+        # very long document doesn't crash the segmenter.
+        if nlp is not None:
+            nlp.max_length = max(nlp.max_length, 2_000_000)
+
+        _SPACY_NLP = nlp
+        _SPACY_INIT_DONE = True
+        return _SPACY_NLP
 
 
 @dataclass
@@ -145,9 +208,27 @@ class SmartChunker:
         return result
 
     def _split_sentences(self, text: str) -> List[str]:
-        """Split text into sentences."""
-        # Split on sentence-ending punctuation
-        sentences = re.split(r"(?<=[.!?])\s+", text)
+        """
+        Split text into sentences using SpaCy when available, with a
+        regex fallback. SpaCy correctly handles abbreviations like
+        "Dr.", "e.g.", and "U.S.A." that confuse the punctuation regex.
+        """
+        if not text or not text.strip():
+            return []
+
+        nlp = _get_spacy_nlp()
+        if nlp is not None:
+            try:
+                doc = nlp(text)
+                sentences = [s.text.strip() for s in doc.sents]
+                return [s for s in sentences if s]
+            except Exception as e:
+                logger.warning(
+                    "spacy_sentence_split_failed_falling_back",
+                    error=str(e)
+                )
+
+        sentences = _SENTENCE_REGEX.split(text)
         return [s.strip() for s in sentences if s.strip()]
 
     def _build_chunks(self, paragraphs: List[str]) -> List[str]:
