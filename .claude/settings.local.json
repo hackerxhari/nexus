@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"from core.config import get_settings; s = get_settings\\(\\); print\\('config-ok', s.OLLAMA_MODEL\\)\")"
-    ]
-  }
-}
