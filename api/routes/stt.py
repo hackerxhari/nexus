@@ -1,7 +1,7 @@
 """
 Speech-to-Text route for Project Nexus.
 Accepts audio file upload, returns transcribed text.
-Uses Moonshine Voice (local, no cloud API).
+Uses Vosk (local, no cloud API).
 """
 
 import json
@@ -30,7 +30,7 @@ async def transcribe_audio(
     request_id: str = Depends(get_request_id)
 ):
     """
-    Transcribe an audio file to text using Moonshine Voice.
+    Transcribe an audio file to text using Vosk.
     Accepts WAV, WebM, or raw PCM audio.
     Returns {"text": "transcribed text..."}.
     """
@@ -42,7 +42,7 @@ async def transcribe_audio(
             detail={
                 "code": "STT_UNAVAILABLE",
                 "message": "Speech-to-text service is not available. "
-                           "Moonshine Voice may not be installed."
+                           "Vosk model may not be installed."
             }
         )
 

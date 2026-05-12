@@ -46,11 +46,10 @@ async def lifespan(app: FastAPI):
         from llm.ollama_client import ollama_client
         ollama_client.prewarm()
 
-    # Initialize STT if enabled
-    if settings.MOONSHINE_ENABLED:
+    # Initialize STT if enabled (Vosk singleton loads its model on import)
+    if settings.VOSK_ENABLED:
         try:
-            from services.stt_service import stt_service
-            stt_service.initialize()
+            from services.stt_service import stt_service  # noqa: F401
         except Exception as e:
             logger.warning("stt_init_skipped", error=str(e))
 

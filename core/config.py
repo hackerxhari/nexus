@@ -281,12 +281,9 @@ class Settings(BaseSettings):
     ALLOWED_IP_RANGES: str = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
-    # Moonshine STT
-    MOONSHINE_ENABLED: bool = True
-    MOONSHINE_LANGUAGE: str = "en"
-    MOONSHINE_MODEL_PATH: str = ""  # Auto-detected if empty
-
     # Vosk STT
+    VOSK_ENABLED: bool = True
+    VOSK_LANGUAGE: str = "en"
     VOSK_MODEL_PATH: str = "models/vosk-model-en-in-0.5"
 
     # Rate Limiting
